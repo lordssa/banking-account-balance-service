@@ -1,0 +1,98 @@
+openapi: 3.0.3
+info:
+  title: API de Consulta de Saldo de Conta
+  version: 1.0.0
+  description: >
+    Consulta do saldo atual da conta. Retorna o snapshot de saldo mais recente
+    aceito com sucesso. Não reconstrói saldos a partir do journal.
+servers:
+  - url: http://localhost:8080
+    description: Local
+paths:
+  /balances/{accountId}:
+    get:
+      operationId: getBalance
+      summary: Consultar saldo atual da conta
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          description: UUID da conta
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Snapshot de saldo atual
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BalanceResponse"
+        "400":
+          description: Identificador de conta malformado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Conta desconhecida (sem snapshot aceito)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Serviço temporariamente indisponível
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Falha inesperada (sem detalhes internos)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    BalanceResponse:
+      type: object
+      required:
+        - accountId
+        - ownerId
+        - amount
+        - currency
+        - lastUpdatedAt
+      properties:
+        accountId:
+          type: string
+          format: uuid
+        ownerId:
+          type: string
+          format: uuid
+        amount:
+          type: string
+          description: Valor decimal exato como string para preservar precisão
+          example: "1234.56"
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+          example: BRL
+        lastUpdatedAt:
+          type: string
+          format: date-time
+          description: Timestamp ISO 8601 do horário de origem do evento vencedor
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: ACCOUNT_NOT_FOUND
+        message:
+          type: string
+          description: Mensagem estável e sem dados sensíveis
+        correlationId:
+          type: string
+          description: Referência opaca de correlação

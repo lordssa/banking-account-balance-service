@@ -1,0 +1,65 @@
+# KEDA scales account-service from SQS backlog, not CPU.
+# Ingest saturation shows up as queue depth / in-flight / delayed messages while
+# pod CPU often stays modest (JDBC wait, virtual threads, long-poll idle).
+#
+# Sizing anchor (local drain 300k / 16m41s ≈ 300 EPS per instance):
+#   ceil(2000 / 300) = 7 replicas at peak — keep maxReplicaCount >= 7 (15 leaves headroom).
+#   minReplicaCount=3 is HA / query capacity with empty queue (no scale-to-zero).
+#
+# Requires KEDA in the cluster (e.g. helm install keda kedacore/keda -n keda --create-namespace)
+# and IRSA on the keda-operator SA with deploy/terraform keda_sqs_scaler policy.
+# Do not also apply a native HorizontalPodAutoscaler for this Deployment.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: account-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: account-service
+  minReplicaCount: 3
+  maxReplicaCount: 15
+  pollingInterval: 15
+  cooldownPeriod: 300
+  fallback:
+    failureThreshold: 3
+    replicas: 3
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          selectPolicy: Max
+          policies:
+            - type: Pods
+              value: 4
+              periodSeconds: 30
+            - type: Percent
+              value: 50
+              periodSeconds: 30
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          selectPolicy: Min
+          policies:
+            - type: Percent
+              value: 25
+              periodSeconds: 60
+  triggers:
+    - type: aws-sqs-queue
+      metadata:
+        # Reads SQS_QUEUE_URL from the target Deployment env (ConfigMap).
+        queueURLFromEnv: SQS_QUEUE_URL
+        awsRegion: sa-east-1
+        # Target backlog units per replica (visible + in-flight + delayed).
+        # Tune after EKS/RDS proof; start near SQS_MAX_CONCURRENT (~32).
+        queueLength: "25"
+        activationQueueLength: "5"
+        scaleOnInFlight: "true"
+        scaleOnDelayed: "true"
+        identityOwner: operator
+    # Query traffic can still heat CPU without a deep SQS backlog.
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "70"

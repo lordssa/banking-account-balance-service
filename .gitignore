@@ -22,6 +22,9 @@ target/
 .specify/
 specs/
 
+### Perf workdirs (generated) ###
+deploy/perf/work/
+
 ### IntelliJ IDEA ###
 .idea
 *.iws
@@ -55,6 +58,14 @@ build/
 !.env.example
 *.pem
 *.key
+
+### Terraform ###
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
 
 ### Coverage / reports ###
 coverage/

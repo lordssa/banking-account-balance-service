@@ -1,5 +1,6 @@
 package com.itau.account.adapter.in.http;
 
+import com.itau.account.application.model.JournalIngestSpan;
 import com.itau.account.application.model.JournalRecord;
 import com.itau.account.application.port.in.RequestJournalReplayCommand;
 import com.itau.account.application.port.in.TraceJournalQuery;
@@ -10,14 +11,13 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
 import java.util.List;
 
-/**
- * Journal HTTP surface. Access is deny-by-default via {@link com.itau.account.application.port.out.JournalAccessPolicy}
- * (no client-spoofable role headers). Every attempt is audited before the decision is enforced.
- */
+
 @RestController
 @RequestMapping("/internal/journal")
 public class JournalController {
@@ -45,6 +45,15 @@ public class JournalController {
     public ResponseEntity<List<JournalRecord>> byAccount(@PathVariable String accountId) {
         return ResponseEntity.ok(
                 traceJournalQuery.byAccount(ANONYMOUS_SUBJECT, AccountId.parse(accountId)));
+    }
+
+    @GetMapping("/ingest-span")
+    public ResponseEntity<JournalIngestSpan> ingestSpan(
+            @RequestParam Instant since,
+            @RequestParam("accountId") List<String> accountIds
+    ) {
+        List<AccountId> parsed = accountIds.stream().map(AccountId::parse).toList();
+        return ResponseEntity.ok(traceJournalQuery.ingestSpan(ANONYMOUS_SUBJECT, since, parsed));
     }
 
     @PostMapping("/replay")

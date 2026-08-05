@@ -37,6 +37,12 @@ class JournalAccessControlTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("JOURNAL_ACCESS_DENIED"));
 
+        mockMvc.perform(get("/internal/journal/ingest-span")
+                        .param("since", "2026-08-05T14:00:00Z")
+                        .param("accountId", UUID.randomUUID().toString()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("JOURNAL_ACCESS_DENIED"));
+
         Integer count = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM administrative_journal_action WHERE action_type = ? AND result = ?",
                 Integer.class,

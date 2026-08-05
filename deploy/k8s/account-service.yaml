@@ -3,7 +3,13 @@ kind: Deployment
 metadata:
   name: account-service
 spec:
-  replicas: 2
+  # HA starting point only — 2k EPS replica count is unproven (docs/design-doc.md §7.1).
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
   selector:
     matchLabels:
       app: account-service
@@ -19,6 +25,21 @@ spec:
           image: ACCOUNT_SERVICE_IMAGE
           ports:
             - containerPort: 8080
+          env:
+            - name: SQS_QUEUE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: account-service
+                  key: SQS_QUEUE_URL
+            - name: SQS_EXPECTED_DLQ_ARN
+              valueFrom:
+                configMapKeyRef:
+                  name: account-service
+                  key: SQS_EXPECTED_DLQ_ARN
+            - name: SQS_MAX_RECEIVE_COUNT
+              value: "5"
+            - name: SQS_TOPOLOGY_VALIDATION_MODE
+              value: "enforce"
           envFrom:
             - configMapRef:
                 name: account-service
@@ -58,31 +79,13 @@ spec:
     - port: 80
       targetPort: 8080
 ---
+# Autoscaling is KEDA (SQS depth), not a native CPU HPA — see keda-scaledobject.yaml
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: account-service
 spec:
-  minAvailable: 1
+  minAvailable: 2
   selector:
     matchLabels:
       app: account-service
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: account-service
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: account-service
-  minReplicas: 2
-  maxReplicas: 15
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70

@@ -16,6 +16,8 @@ import com.itau.account.application.usecase.IngestBalanceEventUseCase;
 import com.itau.account.application.usecase.RejectInvalidEventUseCase;
 import com.itau.account.application.usecase.RequestJournalReplayUseCase;
 import com.itau.account.application.usecase.TraceJournalUseCase;
+import com.itau.account.domain.BalanceEvent;
+import com.itau.account.domain.IngestResult;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -48,8 +50,24 @@ public class ApplicationConfig {
             TransactionTemplate transactionTemplate
     ) {
         RejectInvalidEventUseCase useCase = new RejectInvalidEventUseCase(journalPort);
-        return (attemptKey, correlationId, reasonCode) ->
-                transactionTemplate.execute(status -> useCase.reject(attemptKey, correlationId, reasonCode));
+        return new RejectInvalidEventCommand() {
+            @Override
+            public IngestResult reject(String attemptKey, String correlationId, String reasonCode) {
+                return transactionTemplate.execute(status -> useCase.reject(attemptKey, correlationId, reasonCode));
+            }
+
+            @Override
+            public IngestResult reject(
+                    String attemptKey,
+                    String correlationId,
+                    String reasonCode,
+                    java.util.Map<String, Object> transportContext,
+                    BalanceEvent parsedEventOrNull
+            ) {
+                return transactionTemplate.execute(status ->
+                        useCase.reject(attemptKey, correlationId, reasonCode, transportContext, parsedEventOrNull));
+            }
+        };
     }
 
     @Bean

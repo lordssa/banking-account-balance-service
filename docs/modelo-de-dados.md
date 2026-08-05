@@ -1,6 +1,6 @@
 # Modelo de dados
 
-**Escopo:** schema PostgreSQL do account-service (Flyway V1–V3).  
+**Escopo:** schema PostgreSQL do account-service (Flyway V1–V4).  
 **Dialeto:** PostgreSQL 16.
 
 ---
@@ -131,6 +131,8 @@ CREATE UNIQUE INDEX uq_processed_account_source_ts
 
 Garante no máximo um “dono” não-conflitante por `(conta, timestamp)`. Linhas `CONFLICTING`/`INVALID` podem coexistir no mesmo carimbo de tempo.
 
+**Índice de lookup (V4):** `idx_processed_account_ts_lookup (account_id, source_timestamp, first_processed_at) INCLUDE (transaction_id, first_outcome)` — o único parcial **não** serve `findOtherTransactionAt` (predicado diferente). Usado no ramo de conflito do ingest claim-first.
+
 ### 3.3 `journal_processing_record`
 
 Uma linha por **tentativa** (`attempt_key` = `messageId:receiveCount`).
@@ -163,7 +165,7 @@ Metadados de conflito equal-timestamp.
 
 ### 3.5 `administrative_journal_action`
 
-Auditoria de tentativas de leitura/replay do journal (política *deny-by-default*).
+Auditoria de tentativas de leitura/replay do journal (política *deny-by-default*), incluindo `JOURNAL_INGEST_SPAN`.
 
 ---
 
@@ -175,8 +177,10 @@ Auditoria de tentativas de leitura/replay do journal (política *deny-by-default
 | `DUPLICATE` | `transaction_id` já existia |
 | `STALE` | Timestamp ≤ snapshot atual (ou perdeu CAS) |
 | `CONFLICTING` | Empate de timestamp com outra tx |
-| `INVALID` | Payload inválido isolado |
-| `PERMANENTLY_FAILED` | Esgotamento de retries da aplicação |
+| `INVALID` | Payload inválido journalizado (best-effort); envelope fica para DLQ do broker |
+| `PERMANENTLY_FAILED` | Observação de limiar de receive (best-effort); **não** implica DeleteMessage — DLQ é a cópia recuperável |
+
+O journal **não** armazena o body bruto da mensagem SQS; a DLQ preserva o envelope para investigação/recovery.
 
 ---
 
@@ -187,6 +191,7 @@ Auditoria de tentativas de leitura/replay do journal (política *deny-by-default
 | V1 | Tabelas núcleo |
 | V2 | `currency` CHAR(3) → VARCHAR(3) (alinhamento JPA) |
 | V3 | Demote de duplicatas históricas + índice único parcial |
+| V4 | Índice de lookup `(account_id, source_timestamp)` para conflito/ocupante |
 
 Arquivos: `src/main/resources/db/migration/`.
 
@@ -195,7 +200,4 @@ Arquivos: `src/main/resources/db/migration/`.
 ## 6. Referências
 
 - [Design Doc](design-doc.md)
-- [ADR-001](../specs/001-account-balance-query/adr/ADR-001.md) — PostgreSQL
-- [ADR-003](../specs/001-account-balance-query/adr/ADR-003.md) — Idempotência
-- [ADR-004](../specs/001-account-balance-query/adr/ADR-004.md) — Conflito equal-timestamp
 - [data-model.md (spec)](../specs/001-account-balance-query/data-model.md)

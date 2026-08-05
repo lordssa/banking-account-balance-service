@@ -1,0 +1,14 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "QueueDepthForAutoscaling",
+      "Effect": "Allow",
+      "Action": [
+        "sqs:GetQueueAttributes",
+        "sqs:GetQueueUrl"
+      ],
+      "Resource": "arn:aws:sqs:sa-east-1:000000000000:transacoes-financeiras-processadas"
+    }
+  ]
+}

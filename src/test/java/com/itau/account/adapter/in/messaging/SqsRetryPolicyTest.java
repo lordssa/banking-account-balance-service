@@ -18,9 +18,11 @@ class SqsRetryPolicyTest {
     }
 
     @Test
-    void detectsRetryExhaustionAtMaxReceiveCount() {
-        assertThat(policy.isRetryExhausted(4)).isFalse();
+    void observesBrokerThresholdWithoutAuthorizingDeletion() {
+        assertThat(policy.isAtOrAboveBrokerThreshold(4)).isFalse();
+        assertThat(policy.isAtOrAboveBrokerThreshold(5)).isTrue();
         assertThat(policy.isRetryExhausted(5)).isTrue();
+        assertThat(policy.maxReceiveCount()).isEqualTo(5);
         assertThat(policy.parseReceiveCount("3")).isEqualTo(3);
         assertThat(policy.parseReceiveCount("x")).isEqualTo(1);
     }

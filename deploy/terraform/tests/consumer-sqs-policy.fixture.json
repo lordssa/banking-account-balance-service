@@ -1,0 +1,16 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SourceQueueConsume",
+      "Effect": "Allow",
+      "Action": [
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:ChangeMessageVisibility",
+        "sqs:GetQueueAttributes"
+      ],
+      "Resource": "arn:aws:sqs:sa-east-1:111122223333:dev-transacoes-financeiras-processadas"
+    }
+  ]
+}

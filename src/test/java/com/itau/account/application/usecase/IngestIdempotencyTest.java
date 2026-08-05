@@ -15,8 +15,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.Optional;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -41,23 +39,19 @@ class IngestIdempotencyTest {
     @Test
     void duplicateTransactionDoesNotUpdateSnapshot() {
         var event = TestFixtures.event(1_000L, "100.00");
-        when(processedTransactionPort.findOutcome(event.transactionId()))
-                .thenReturn(Optional.of(ProcessingOutcome.ACCEPTED));
+        when(processedTransactionPort.tryInsert(any(ProcessedTransactionInsert.class)))
+                .thenReturn(ClaimResult.DUPLICATE_TRANSACTION);
 
         var result = useCase.ingest(event, "attempt-dup", "corr-dup");
 
         assertThat(result.outcome()).isEqualTo(ProcessingOutcome.DUPLICATE);
         assertThat(result.snapshotEffect()).isEqualTo(SnapshotEffect.UNCHANGED);
         verify(snapshotPort, never()).upsertIfNewer(any());
-        verify(processedTransactionPort, never()).tryInsert(any(ProcessedTransactionInsert.class));
     }
 
     @Test
     void concurrentDuplicateClaimIsDuplicate() {
         var event = TestFixtures.event(1_000L, "100.00");
-        when(processedTransactionPort.findOutcome(event.transactionId())).thenReturn(Optional.empty());
-        when(processedTransactionPort.findOtherTransactionAt(any(), any(), any())).thenReturn(Optional.empty());
-        when(snapshotPort.findByAccountId(event.accountId())).thenReturn(Optional.empty());
         when(processedTransactionPort.tryInsert(any(ProcessedTransactionInsert.class)))
                 .thenReturn(ClaimResult.DUPLICATE_TRANSACTION);
 

@@ -8,7 +8,6 @@ import com.itau.account.application.port.out.AccountBalanceSnapshotPort;
 import com.itau.account.application.port.out.JournalPort;
 import com.itau.account.application.port.out.OrderingConflictPort;
 import com.itau.account.application.port.out.ProcessedTransactionPort;
-import com.itau.account.domain.AccountBalanceSnapshot;
 import com.itau.account.domain.AccountId;
 import com.itau.account.domain.BalanceEvent;
 import com.itau.account.domain.Money;
@@ -30,6 +29,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -49,11 +49,8 @@ class IngestBalanceEventUseCaseTest {
     }
 
     @Test
-    void acceptsNewerEvent() {
+    void acceptsNewerEventWithClaimFirstPath() {
         var event = sampleEvent(1_000L, "100.00");
-        when(processedTransactionPort.findOutcome(event.transactionId())).thenReturn(Optional.empty());
-        when(processedTransactionPort.findOtherTransactionAt(any(), any(), any())).thenReturn(Optional.empty());
-        when(snapshotPort.findByAccountId(event.accountId())).thenReturn(Optional.empty());
         when(processedTransactionPort.tryInsert(any(ProcessedTransactionInsert.class))).thenReturn(ClaimResult.INSERTED);
         when(snapshotPort.upsertIfNewer(event)).thenReturn(true);
 
@@ -61,6 +58,9 @@ class IngestBalanceEventUseCaseTest {
 
         assertThat(result.outcome()).isEqualTo(ProcessingOutcome.ACCEPTED);
         assertThat(result.snapshotEffect()).isEqualTo(SnapshotEffect.UPDATED);
+        verify(processedTransactionPort, never()).findOutcome(any());
+        verify(processedTransactionPort, never()).findOtherTransactionAt(any(), any(), any());
+        verify(snapshotPort, never()).findByAccountId(any());
 
         ArgumentCaptor<JournalRecord> journalCaptor = ArgumentCaptor.forClass(JournalRecord.class);
         verify(journalPort).append(journalCaptor.capture());
@@ -71,38 +71,36 @@ class IngestBalanceEventUseCaseTest {
     @Test
     void duplicateDoesNotUpdate() {
         var event = sampleEvent(1_000L, "100.00");
-        when(processedTransactionPort.findOutcome(event.transactionId())).thenReturn(Optional.of(ProcessingOutcome.ACCEPTED));
+        when(processedTransactionPort.tryInsert(any(ProcessedTransactionInsert.class)))
+                .thenReturn(ClaimResult.DUPLICATE_TRANSACTION);
 
         var result = useCase.ingest(event, "attempt-2", "corr-2");
 
         assertThat(result.outcome()).isEqualTo(ProcessingOutcome.DUPLICATE);
         assertThat(result.snapshotEffect()).isEqualTo(SnapshotEffect.UNCHANGED);
+        verify(snapshotPort, never()).upsertIfNewer(any());
     }
 
     @Test
     void staleOlderDoesNotOverwrite() {
         var older = sampleEvent(1_000L, "50.00");
-        var current = new AccountBalanceSnapshot(
-                older.accountId(), older.ownerId(), Money.of(new BigDecimal("90.00"), "BRL"),
-                BalanceEvent.fromEpochMicros(2_000L), "ENABLED", new TransactionId(UUID.randomUUID())
-        );
-        when(processedTransactionPort.findOutcome(older.transactionId())).thenReturn(Optional.empty());
-        when(processedTransactionPort.findOtherTransactionAt(any(), any(), any())).thenReturn(Optional.empty());
-        when(snapshotPort.findByAccountId(older.accountId())).thenReturn(Optional.of(current));
         when(processedTransactionPort.tryInsert(any(ProcessedTransactionInsert.class))).thenReturn(ClaimResult.INSERTED);
+        when(snapshotPort.upsertIfNewer(older)).thenReturn(false);
 
         var result = useCase.ingest(older, "attempt-3", "corr-3");
 
         assertThat(result.outcome()).isEqualTo(ProcessingOutcome.STALE);
+        assertThat(result.reasonCode()).isEqualTo("STALE_LOST_RACE");
     }
 
     @Test
     void equalTimestampConflictsWhenOtherAlreadyVisible() {
         var event = sampleEvent(1_000L, "100.00");
         var other = new TransactionId(UUID.randomUUID());
-        when(processedTransactionPort.findOutcome(event.transactionId())).thenReturn(Optional.empty());
+        when(processedTransactionPort.tryInsert(any(ProcessedTransactionInsert.class)))
+                .thenReturn(ClaimResult.ACCOUNT_TIMESTAMP_TAKEN)
+                .thenReturn(ClaimResult.INSERTED);
         when(processedTransactionPort.findOtherTransactionAt(any(), any(), any())).thenReturn(Optional.of(other));
-        when(processedTransactionPort.tryInsert(any(ProcessedTransactionInsert.class))).thenReturn(ClaimResult.INSERTED);
 
         var result = useCase.ingest(event, "attempt-4", "corr-4");
 
@@ -111,35 +109,29 @@ class IngestBalanceEventUseCaseTest {
         verify(orderingConflictPort).recordConflict(conflictCaptor.capture());
         assertThat(conflictCaptor.getValue().transactionIdA()).isEqualTo(other);
         assertThat(conflictCaptor.getValue().transactionIdB()).isEqualTo(event.transactionId());
+        verify(snapshotPort, never()).upsertIfNewer(any());
     }
 
     @Test
     void concurrentEqualTimestampUniqueViolationBecomesConflictNotStaleLostRace() {
         var event = sampleEvent(1_000L, "100.00");
         var other = new TransactionId(UUID.randomUUID());
-        when(processedTransactionPort.findOutcome(event.transactionId())).thenReturn(Optional.empty());
-        when(processedTransactionPort.findOtherTransactionAt(any(), any(), any()))
-                .thenReturn(Optional.empty())
-                .thenReturn(Optional.of(other));
-        when(snapshotPort.findByAccountId(event.accountId())).thenReturn(Optional.empty());
         when(processedTransactionPort.tryInsert(any(ProcessedTransactionInsert.class)))
                 .thenReturn(ClaimResult.ACCOUNT_TIMESTAMP_TAKEN)
                 .thenReturn(ClaimResult.INSERTED);
+        when(processedTransactionPort.findOtherTransactionAt(any(), any(), any())).thenReturn(Optional.of(other));
 
         var result = useCase.ingest(event, "attempt-5", "corr-5");
 
         assertThat(result.outcome()).isEqualTo(ProcessingOutcome.CONFLICTING);
         assertThat(result.reasonCode()).isEqualTo("EQUAL_TIMESTAMP_CONFLICT");
         verify(orderingConflictPort).recordConflict(any(OrderingConflictInsert.class));
-        verify(snapshotPort, org.mockito.Mockito.never()).upsertIfNewer(any());
+        verify(snapshotPort, never()).upsertIfNewer(any());
     }
 
     @Test
     void lostCasRaceIsStale() {
         var event = sampleEvent(3_000L, "100.00");
-        when(processedTransactionPort.findOutcome(event.transactionId())).thenReturn(Optional.empty());
-        when(processedTransactionPort.findOtherTransactionAt(any(), any(), any())).thenReturn(Optional.empty());
-        when(snapshotPort.findByAccountId(event.accountId())).thenReturn(Optional.empty());
         when(processedTransactionPort.tryInsert(any(ProcessedTransactionInsert.class))).thenReturn(ClaimResult.INSERTED);
         when(snapshotPort.upsertIfNewer(event)).thenReturn(false);
 

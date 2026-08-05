@@ -16,6 +16,7 @@ public record AdministrativeJournalActionInsert(
 
     public static final String TYPE_JOURNAL_READ_BY_TRANSACTION = "JOURNAL_READ_BY_TRANSACTION";
     public static final String TYPE_JOURNAL_READ_BY_ACCOUNT = "JOURNAL_READ_BY_ACCOUNT";
+    public static final String TYPE_JOURNAL_INGEST_SPAN = "JOURNAL_INGEST_SPAN";
     public static final String TYPE_JOURNAL_REPLAY = "JOURNAL_REPLAY";
 
     public AdministrativeJournalActionInsert {

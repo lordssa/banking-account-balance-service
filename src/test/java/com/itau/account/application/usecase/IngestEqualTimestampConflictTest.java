@@ -50,9 +50,10 @@ class IngestEqualTimestampConflictTest {
     void otherProcessedTransactionAtSameTimestampIsConflict() {
         var event = TestFixtures.event(1_000L, "100.00");
         var other = new TransactionId(UUID.randomUUID());
-        when(processedTransactionPort.findOutcome(event.transactionId())).thenReturn(Optional.empty());
+        when(processedTransactionPort.tryInsert(any(ProcessedTransactionInsert.class)))
+                .thenReturn(ClaimResult.ACCOUNT_TIMESTAMP_TAKEN)
+                .thenReturn(ClaimResult.INSERTED);
         when(processedTransactionPort.findOtherTransactionAt(any(), any(), any())).thenReturn(Optional.of(other));
-        when(processedTransactionPort.tryInsert(any(ProcessedTransactionInsert.class))).thenReturn(ClaimResult.INSERTED);
 
         var result = useCase.ingest(event, "attempt-eq", "corr-eq");
 
@@ -76,10 +77,11 @@ class IngestEqualTimestampConflictTest {
                 "ENABLED",
                 winner
         );
-        when(processedTransactionPort.findOutcome(event.transactionId())).thenReturn(Optional.empty());
+        when(processedTransactionPort.tryInsert(any(ProcessedTransactionInsert.class)))
+                .thenReturn(ClaimResult.ACCOUNT_TIMESTAMP_TAKEN)
+                .thenReturn(ClaimResult.INSERTED);
         when(processedTransactionPort.findOtherTransactionAt(any(), any(), any())).thenReturn(Optional.empty());
         when(snapshotPort.findByAccountId(event.accountId())).thenReturn(Optional.of(snapshot));
-        when(processedTransactionPort.tryInsert(any(ProcessedTransactionInsert.class))).thenReturn(ClaimResult.INSERTED);
 
         var result = useCase.ingest(event, "attempt-snap", "corr-snap");
 
@@ -92,14 +94,10 @@ class IngestEqualTimestampConflictTest {
     void uniqueViolationOnAccountTimestampIsConflictNotStaleLostRace() {
         var event = TestFixtures.event(1_000L, "100.00");
         var other = new TransactionId(UUID.randomUUID());
-        when(processedTransactionPort.findOutcome(event.transactionId())).thenReturn(Optional.empty());
-        when(processedTransactionPort.findOtherTransactionAt(any(), any(), any()))
-                .thenReturn(Optional.empty())
-                .thenReturn(Optional.of(other));
-        when(snapshotPort.findByAccountId(event.accountId())).thenReturn(Optional.empty());
         when(processedTransactionPort.tryInsert(any(ProcessedTransactionInsert.class)))
                 .thenReturn(ClaimResult.ACCOUNT_TIMESTAMP_TAKEN)
                 .thenReturn(ClaimResult.INSERTED);
+        when(processedTransactionPort.findOtherTransactionAt(any(), any(), any())).thenReturn(Optional.of(other));
 
         var result = useCase.ingest(event, "attempt-unique", "corr-unique");
 
@@ -111,12 +109,11 @@ class IngestEqualTimestampConflictTest {
     @Test
     void uniqueViolationWithoutVisibleOccupantStillIsolatesAsConflict() {
         var event = TestFixtures.event(1_000L, "100.00");
-        when(processedTransactionPort.findOutcome(event.transactionId())).thenReturn(Optional.empty());
-        when(processedTransactionPort.findOtherTransactionAt(any(), any(), any())).thenReturn(Optional.empty());
-        when(snapshotPort.findByAccountId(event.accountId())).thenReturn(Optional.empty());
         when(processedTransactionPort.tryInsert(any(ProcessedTransactionInsert.class)))
                 .thenReturn(ClaimResult.ACCOUNT_TIMESTAMP_TAKEN)
                 .thenReturn(ClaimResult.INSERTED);
+        when(processedTransactionPort.findOtherTransactionAt(any(), any(), any())).thenReturn(Optional.empty());
+        when(snapshotPort.findByAccountId(event.accountId())).thenReturn(Optional.empty());
 
         var result = useCase.ingest(event, "attempt-orphan", "corr-orphan");
 

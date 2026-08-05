@@ -17,8 +17,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.Optional;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -42,9 +40,6 @@ class JournalTraceTest {
     @Test
     void acceptedEventJournalsSnapshotUpdateDecision() {
         var event = TestFixtures.event(5_000L, "333.00");
-        when(processedTransactionPort.findOutcome(event.transactionId())).thenReturn(Optional.empty());
-        when(processedTransactionPort.findOtherTransactionAt(any(), any(), any())).thenReturn(Optional.empty());
-        when(snapshotPort.findByAccountId(event.accountId())).thenReturn(Optional.empty());
         when(processedTransactionPort.tryInsert(any(ProcessedTransactionInsert.class))).thenReturn(ClaimResult.INSERTED);
         when(snapshotPort.upsertIfNewer(event)).thenReturn(true);
 

@@ -22,6 +22,7 @@ public class IngestionMetrics {
     private final AtomicBoolean consumerRunning = new AtomicBoolean(false);
     private final AtomicInteger consumerInFlight = new AtomicInteger(0);
     private final AtomicInteger permitsAvailable = new AtomicInteger(0);
+    private final AtomicInteger topologyValid = new AtomicInteger(0);
 
     public IngestionMetrics(MeterRegistry registry) {
         this.registry = registry;
@@ -34,6 +35,21 @@ public class IngestionMetrics {
         Gauge.builder(AccountMetricNames.CONSUMER_PERMITS_AVAILABLE, permitsAvailable, AtomicInteger::get)
                 .description("Available concurrency permits")
                 .register(registry);
+        Gauge.builder(AccountMetricNames.SQS_TOPOLOGY_VALID, topologyValid, AtomicInteger::get)
+                .description("1 when source queue RedrivePolicy matches expected DLQ ARN and maxReceiveCount")
+                .register(registry);
+    }
+
+    public void setTopologyValid(boolean valid) {
+        topologyValid.set(valid ? 1 : 0);
+    }
+
+    public void recordAckFailure() {
+        Counter.builder(AccountMetricNames.INGESTION_ACK_FAILURES).register(registry).increment();
+    }
+
+    public void recordUnexpectedFailure() {
+        Counter.builder(AccountMetricNames.INGESTION_UNEXPECTED_FAILURES).register(registry).increment();
     }
 
     public void markConsumerStarted(int maxConcurrent) {

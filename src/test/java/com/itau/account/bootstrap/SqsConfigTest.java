@@ -1,5 +1,6 @@
 package com.itau.account.bootstrap;
 
+import com.itau.account.support.SqsTestProperties;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.services.sqs.SqsClient;
 
@@ -9,8 +10,8 @@ class SqsConfigTest {
 
     @Test
     void buildsClientWithEndpointOverride() {
-        SqsProperties props = new SqsProperties(
-                false, "", "http://127.0.0.1:4566", "sa-east-1", 16, 10, 60, 5);
+        SqsProperties props = SqsTestProperties.of(
+                false, "", "http://127.0.0.1:4566", "sa-east-1", 16, 10, 60, 5, "", "off");
 
         try (SqsClient client = new SqsConfig().sqsClient(props)) {
             assertThat(client).isNotNull();
@@ -19,8 +20,8 @@ class SqsConfigTest {
 
     @Test
     void buildsClientWithoutEndpointOverride() {
-        SqsProperties props = new SqsProperties(
-                false, "", " ", "sa-east-1", 16, 10, 60, 5);
+        SqsProperties props = SqsTestProperties.of(
+                false, "", " ", "sa-east-1", 16, 10, 60, 5, "", "off");
 
         try (SqsClient client = new SqsConfig().sqsClient(props)) {
             assertThat(client).isNotNull();

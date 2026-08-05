@@ -1,0 +1,24 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DlqRedrive",
+      "Effect": "Allow",
+      "Action": [
+        "sqs:StartMessageMoveTask",
+        "sqs:CancelMessageMoveTask",
+        "sqs:ListMessageMoveTasks",
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:GetQueueAttributes"
+      ],
+      "Resource": "arn:aws:sqs:sa-east-1:111122223333:dev-transacoes-financeiras-processadas-dlq"
+    },
+    {
+      "Sid": "SourceSendForMove",
+      "Effect": "Allow",
+      "Action": ["sqs:SendMessage"],
+      "Resource": "arn:aws:sqs:sa-east-1:111122223333:dev-transacoes-financeiras-processadas"
+    }
+  ]
+}

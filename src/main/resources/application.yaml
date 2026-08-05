@@ -9,7 +9,7 @@ spring:
     username: ${DB_USER:account}
     password: ${DB_PASSWORD:account}
     hikari:
-      maximum-pool-size: ${DB_POOL_SIZE:20}
+      maximum-pool-size: ${DB_POOL_SIZE:40}
       minimum-idle: 2
       connection-timeout: 3000
       validation-timeout: 1000
@@ -39,7 +39,7 @@ management:
         enabled: true
       group:
         readiness:
-          include: readinessState,db
+          include: readinessState,db,sqsTopology
         liveness:
           include: livenessState
   metrics:
@@ -51,6 +51,10 @@ management:
         ingestion.processing: true
         balance.returned_age_seconds: true
         db.operation: true
+      # Explicit percentiles for SC-003 / design-doc query SLO via /actuator/metrics (server-side)
+      percentiles:
+        http.server.requests: 0.95, 0.99
+        ingestion.processing: 0.95, 0.99
   tracing:
     sampling:
       probability: 1.0
@@ -67,15 +71,27 @@ management:
         url: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/logs}
 
 account:
+  journal:
+    allow-anonymous-read: ${JOURNAL_ALLOW_ANONYMOUS_READ:true}
   sqs:
     enabled: ${SQS_ENABLED:true}
     queue-url: ${SQS_QUEUE_URL:http://localhost:4566/000000000000/transacoes-financeiras-processadas}
     endpoint-override: ${AWS_ENDPOINT_OVERRIDE:http://localhost:4566}
     region: ${AWS_REGION:sa-east-1}
-    max-concurrent: ${SQS_MAX_CONCURRENT:16}
+    max-concurrent: ${SQS_MAX_CONCURRENT:32}
+    receiver-count: ${SQS_RECEIVER_COUNT:4}
     wait-time-seconds: 10
     visibility-timeout-seconds: 60
+    # Expected broker RedrivePolicy.maxReceiveCount (validation/metrics only — never triggers DeleteMessage)
     max-receive-count: ${SQS_MAX_RECEIVE_COUNT:5}
+    expected-dlq-arn: ${SQS_EXPECTED_DLQ_ARN:arn:aws:sqs:sa-east-1:000000000000:transacoes-financeiras-processadas-dlq}
+    # observe | enforce | off
+    topology-validation-mode: ${SQS_TOPOLOGY_VALIDATION_MODE:observe}
+    topology-refresh-valid-seconds: ${SQS_TOPOLOGY_REFRESH_VALID_SECONDS:45}
+    topology-refresh-invalid-seconds: ${SQS_TOPOLOGY_REFRESH_INVALID_SECONDS:3}
+    http-max-connections: ${SQS_HTTP_MAX_CONNECTIONS:64}
+    # Privacy-safe HMAC of payload body when producers omit eventCorrelationId / correlationId attrs
+    envelope-hmac-secret: ${SQS_ENVELOPE_HMAC_SECRET:local-dev-only-change-me}
 
 logging:
   pattern:

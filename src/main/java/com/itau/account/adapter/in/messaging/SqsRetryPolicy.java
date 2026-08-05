@@ -1,7 +1,9 @@
 package com.itau.account.adapter.in.messaging;
 
 /**
- * Classifies SQS delivery failures and detects retry exhaustion (app-level maxReceiveCount -> permanent journal).
+ * Observes SQS ApproximateReceiveCount relative to the expected broker RedrivePolicy
+ * {@code maxReceiveCount}. Does not authorize message deletion — the broker is the sole
+ * authority for moving messages to the DLQ.
  */
 public final class SqsRetryPolicy {
 
@@ -10,14 +12,14 @@ public final class SqsRetryPolicy {
         PERMANENT
     }
 
-    private final int maxReceiveCount;
+    private final int expectedMaxReceiveCount;
 
-    public SqsRetryPolicy(int maxReceiveCount) {
-        this.maxReceiveCount = Math.max(1, maxReceiveCount);
+    public SqsRetryPolicy(int expectedMaxReceiveCount) {
+        this.expectedMaxReceiveCount = Math.max(1, expectedMaxReceiveCount);
     }
 
     public int maxReceiveCount() {
-        return maxReceiveCount;
+        return expectedMaxReceiveCount;
     }
 
     public FailureClass classify(Throwable error) {
@@ -27,8 +29,12 @@ public final class SqsRetryPolicy {
         return FailureClass.TRANSIENT;
     }
 
+    public boolean isAtOrAboveBrokerThreshold(int approximateReceiveCount) {
+        return approximateReceiveCount >= expectedMaxReceiveCount;
+    }
+
     public boolean isRetryExhausted(int approximateReceiveCount) {
-        return approximateReceiveCount >= maxReceiveCount;
+        return isAtOrAboveBrokerThreshold(approximateReceiveCount);
     }
 
     public int parseReceiveCount(String raw) {

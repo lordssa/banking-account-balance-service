@@ -16,7 +16,14 @@ class SqsPropertiesTest {
                 8,
                 5,
                 30,
-                7
+                7,
+                "arn:aws:sqs:us-east-1:123:dlq",
+                "enforce",
+                "prod-hmac",
+                3,
+                60,
+                2,
+                128
         );
 
         assertThat(props.enabled()).isTrue();
@@ -27,5 +34,13 @@ class SqsPropertiesTest {
         assertThat(props.waitTimeSeconds()).isEqualTo(5);
         assertThat(props.visibilityTimeoutSeconds()).isEqualTo(30);
         assertThat(props.maxReceiveCount()).isEqualTo(7);
+        assertThat(props.expectedDlqArn()).isEqualTo("arn:aws:sqs:us-east-1:123:dlq");
+        assertThat(props.topologyEnforce()).isTrue();
+        assertThat(props.envelopeHmacSecret()).isEqualTo("prod-hmac");
+        assertThat(props.receiverCount()).isEqualTo(3);
+        assertThat(props.topologyRefreshValidSeconds()).isEqualTo(60);
+        assertThat(props.topologyRefreshInvalidSeconds()).isEqualTo(2);
+        assertThat(props.httpMaxConnections()).isEqualTo(128);
+        assertThat(props.topologyObserveOrEnforce()).isTrue();
     }
 }

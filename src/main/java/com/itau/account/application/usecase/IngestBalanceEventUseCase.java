@@ -21,6 +21,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Claim-first ingest: the common ACCEPTED path is tryInsert → upsertIfNewer → journal.
+ * Duplicate/conflict lookups run only when the idempotency/order claim fails.
+ */
 public class IngestBalanceEventUseCase implements IngestBalanceEventCommand {
 
     private final AccountBalanceSnapshotPort snapshotPort;
@@ -42,68 +46,24 @@ public class IngestBalanceEventUseCase implements IngestBalanceEventCommand {
 
     @Override
     public IngestResult ingest(BalanceEvent event, String attemptKey, String correlationId) {
-        if (processedTransactionPort.findOutcome(event.transactionId()).isPresent()) {
-            return finish(event, attemptKey, correlationId, ProcessingOutcome.DUPLICATE, SnapshotEffect.UNCHANGED, "DUPLICATE_TRANSACTION");
-        }
-
-        var otherAtSameTs = processedTransactionPort.findOtherTransactionAt(
-                event.accountId(), event.sourceTimestamp(), event.transactionId());
-        if (otherAtSameTs.isPresent()) {
-            return conflict(event, attemptKey, correlationId, otherAtSameTs.get());
-        }
-
-        var existingSnapshot = snapshotPort.findByAccountId(event.accountId());
-        if (existingSnapshot.isPresent()
-                && EventOrdering.isEqualTimestamp(existingSnapshot.get().sourceTimestamp(), event.sourceTimestamp())
-                && !existingSnapshot.get().winningTransactionId().equals(event.transactionId())) {
-            return conflict(event, attemptKey, correlationId, existingSnapshot.get().winningTransactionId());
-        }
-
-        boolean clearlyStale = existingSnapshot.isPresent()
-                && !EventOrdering.isStrictlyNewer(event.sourceTimestamp(), existingSnapshot.get().sourceTimestamp());
-
-        if (clearlyStale) {
-            return claimThen(
-                    event,
-                    attemptKey,
-                    correlationId,
-                    ProcessingOutcome.STALE,
-                    SnapshotEffect.UNCHANGED,
-                    "STALE_OLDER_OR_EQUAL"
-            );
-        }
-
         ClaimResult claim = claim(event, ProcessingOutcome.ACCEPTED);
-        if (claim == ClaimResult.DUPLICATE_TRANSACTION) {
-            return finish(event, attemptKey, correlationId, ProcessingOutcome.DUPLICATE, SnapshotEffect.UNCHANGED, "DUPLICATE_TRANSACTION");
-        }
-        if (claim == ClaimResult.ACCOUNT_TIMESTAMP_TAKEN) {
-            return conflictWithOccupant(event, attemptKey, correlationId);
-        }
-
-        boolean updated = snapshotPort.upsertIfNewer(event);
-        if (updated) {
-            return finish(event, attemptKey, correlationId, ProcessingOutcome.ACCEPTED, SnapshotEffect.UPDATED, "ACCEPTED_NEWER");
-        }
-
-        // Concurrent newer event won the snapshot CAS — not an equal-timestamp race (guarded by unique claim).
-        return finish(event, attemptKey, correlationId, ProcessingOutcome.STALE, SnapshotEffect.UNCHANGED, "STALE_LOST_RACE");
-    }
-
-    private IngestResult claimThen(
-            BalanceEvent event,
-            String attemptKey,
-            String correlationId,
-            ProcessingOutcome outcome,
-            SnapshotEffect effect,
-            String reasonCode
-    ) {
-        ClaimResult claim = claim(event, outcome);
         return switch (claim) {
-            case INSERTED -> finish(event, attemptKey, correlationId, outcome, effect, reasonCode);
             case DUPLICATE_TRANSACTION -> finish(
-                    event, attemptKey, correlationId, ProcessingOutcome.DUPLICATE, SnapshotEffect.UNCHANGED, "DUPLICATE_TRANSACTION");
+                    event, attemptKey, correlationId,
+                    ProcessingOutcome.DUPLICATE, SnapshotEffect.UNCHANGED, "DUPLICATE_TRANSACTION");
             case ACCOUNT_TIMESTAMP_TAKEN -> conflictWithOccupant(event, attemptKey, correlationId);
+            case INSERTED -> {
+                boolean updated = snapshotPort.upsertIfNewer(event);
+                if (updated) {
+                    yield finish(
+                            event, attemptKey, correlationId,
+                            ProcessingOutcome.ACCEPTED, SnapshotEffect.UPDATED, "ACCEPTED_NEWER");
+                }
+                // Older than current snapshot, or concurrent newer CAS winner.
+                yield finish(
+                        event, attemptKey, correlationId,
+                        ProcessingOutcome.STALE, SnapshotEffect.UNCHANGED, "STALE_LOST_RACE");
+            }
         };
     }
 

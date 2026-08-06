@@ -202,40 +202,8 @@ Sob carga paralela é esperado misturar `ACCEPTED` e `STALE` (eventos mais antig
 
 ---
 
-## 9. Harness de performance
 
-```mermaid
-sequenceDiagram
-  participant P as run-benchmark.sh
-  participant Q as SQS
-  participant A as account-service
-  participant PG as PostgreSQL
-  participant K as k6
-
-  P->>Q: Purge fonte + DLQ
-  P->>Q: Seed idx=1 DelaySeconds=0
-  A->>Q: Consome seed
-  P->>P: Verify 200 / amount=1.00
-  P->>Q: Main idx=2..N DelaySeconds=D
-  Note over Q: delayed ≈ N — consumer não vê
-  P->>P: Espera publish_end + D e delayed=0
-  P->>K: Start k6 (SC-003 overlap)
-  A->>Q: Consome backlog
-  K->>A: GET /balances (simultâneo)
-  P->>P: Drain visible+inflight+delayed=0
-  P->>P: T1 scrape p95/p99 (gate SC-003)
-  P->>PG: MIN/MAX first_processed_at → EPS durável
-  P->>P: Wait k6; T2 observacional
-  P->>P: Verify oracle final
-```
-
-- EPS preferido: `COUNT / (MAX(first_processed_at) − MIN(first_processed_at))` nas contas do run após `T_consume`.
-- Publisher msg/s **não** entra no gate.
-- Âncora local de sizing: drain **300k** em **16 min 41 s** ⇒ **~300 EPS**/instância; piso para 2k EPS = **7** réplicas (`ceil(2000/300)`). Ainda não prova EKS/RDS. Detalhe: [arquitetura §5](arquitetura-aws-e-pipeline.md)
-
----
-
-## 10. Referências
+## 9. Referências
 
 - [Modelo de dados](modelo-de-dados.md)
 - [Design Doc](design-doc.md)

@@ -261,19 +261,12 @@ flowchart LR
 | Wall clock de drain | **16 min 41 s** (1.001 s) |
 | Throughput médio | \(300\,000 / 1\,001 \approx\) **~300 EPS** |
 | Interpretação | Teto sustentável observado de **uma** instância neste setup local (não é pico de janela curta) |
-| Registro | [run-20260805T300k-drain.md](../deploy/perf/results/run-20260805T300k-drain.md) |
-
-Runs curtos anteriores (ex.: [run-20260805T021709Z](../deploy/perf/results/run-20260805T021709Z.md) — **650 EPS** em **~3 s**, gate FAIL) medem rajada, não capacidade sustentada. O drain de 300k é a melhor âncora local para sizing por réplica.
 
 ### 5.0.1 Piso de réplicas para pico 2.000 EPS
 
 Alvo do desafio: **≥ 2.000 eventos/s** no ambiente de produção.
 
 Piso linear a partir da medição de 1 instância:
-
-\[
-\left\lceil \frac{2000}{300} \right\rceil = \mathbf{7}\ \text{réplicas}
-\]
 
 | Uso | Réplicas | Nota |
 | --- | --- | --- |

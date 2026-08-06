@@ -200,4 +200,4 @@ Arquivos: `src/main/resources/db/migration/`.
 ## 6. Referências
 
 - [Design Doc](design-doc.md)
-- [data-model.md (spec)](../specs/001-account-balance-query/data-model.md)
+

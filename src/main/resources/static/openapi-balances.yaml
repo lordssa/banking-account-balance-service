@@ -28,6 +28,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BalanceResponse"
+              example:
+                id: 5b19c8b6-0cc4-4c72-a989-0c2ee15fa975
+                owner: 315e3cfe-f4af-4cd2-b298-a449e614349a
+                balance:
+                  amount: 183.12
+                  currency: BRL
+                updated_at: "2025-07-05T18:04:13.433-03:00"
         "400":
           description: Identificador de conta malformado
           content:
@@ -57,30 +64,40 @@ components:
     BalanceResponse:
       type: object
       required:
-        - accountId
-        - ownerId
+        - id
+        - owner
+        - balance
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador da conta
+        owner:
+          type: string
+          format: uuid
+          description: Identificador do titular
+        balance:
+          $ref: "#/components/schemas/Balance"
+        updated_at:
+          type: string
+          format: date-time
+          description: Data/hora da última atualização (ISO 8601, horário de origem do evento vencedor)
+    Balance:
+      type: object
+      required:
         - amount
         - currency
-        - lastUpdatedAt
       properties:
-        accountId:
-          type: string
-          format: uuid
-        ownerId:
-          type: string
-          format: uuid
         amount:
-          type: string
-          description: Valor decimal exato como string para preservar precisão
-          example: "1234.56"
+          type: number
+          description: Valor do saldo (ISO / decimal JSON number)
+          example: 183.12
         currency:
           type: string
           pattern: "^[A-Z]{3}$"
+          description: Código de moeda ISO 4217
           example: BRL
-        lastUpdatedAt:
-          type: string
-          format: date-time
-          description: Timestamp ISO 8601 do horário de origem do evento vencedor
     ErrorResponse:
       type: object
       required:

@@ -1,8 +1,9 @@
 .git
 .idea
 .vscode
-target
-**/target
+# Keep packaged jar for the runtime image; drop the rest of Maven output.
+target/*
+!target/account-service-*.jar
 *.iml
 *.class
 *.log

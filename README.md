@@ -32,7 +32,7 @@ Serviço Spring Boot que consome eventos autoritativos de saldo de conta a parti
 | JDK                  | **25**                                                                    |
 | Maven                | Via wrapper (`./mvnw` / `mvnw.cmd`) — instalação global não é obrigatória |
 | Docker Desktop       | Necessário para Testcontainers e stack Compose opcional                   |
-| (Opcional) curl / k6 | Checagens manuais e suite de carga em `deploy/perf`                       |
+| (Opcional) curl / k6 | Checagens manuais e suite de carga em `deploy/perf` (`k6-ab.sh` ≈ Apache Bench) |
 
 
 Portas locais livres ao subir dependências: `5432` (Postgres), `4566` (LocalStack), `8080` (app), `4318` (OTel, opcional).
@@ -124,11 +124,13 @@ Formato de resposta de sucesso:
 
 ```json
 {
-  "accountId": "...",
-  "ownerId": "...",
-  "amount": "100.25",
-  "currency": "BRL",
-  "lastUpdatedAt": "2023-11-14T22:13:20.000001Z"
+  "id": "5b19c8b6-0cc4-4c72-a989-0c2ee15fa975",
+  "owner": "315e3cfe-f4af-4cd2-b298-a449e614349a",
+  "balance": {
+    "amount": 183.12,
+    "currency": "BRL"
+  },
+  "updated_at": "2025-07-05T18:04:13.433-03:00"
 }
 ```
 
@@ -233,6 +235,17 @@ Metas (design-doc §7 / SC-003):
 - Correção dos saldos finais + fila drenada + durabilidade
 
 Procedimento e scripts: `[deploy/perf/README.md](deploy/perf/README.md)`.
+
+Carga estilo Apache Bench (concurrency + total de requests + URL):
+
+```bash
+# Git Bash — equivalente a: ab -c 10 -n 20 URL
+./deploy/perf/k6-ab.sh -c 10 -n 20 'http://localhost:8080/balances/<account-uuid>'
+
+# Ou direto com env:
+URL='http://localhost:8080/internal/journal/accounts/<uuid>' C=10 N=20 \
+  k6 run deploy/perf/k6-ab-like.js
+```
 
 ```bash
 export BASE_URL=http://localhost:8080

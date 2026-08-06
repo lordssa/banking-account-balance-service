@@ -58,10 +58,11 @@ class GetBalanceIntegrationTest {
 
         mockMvc.perform(get("/balances/{id}", account))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accountId").value(account.toString()))
-                .andExpect(jsonPath("$.ownerId").value(owner.toString()))
-                .andExpect(jsonPath("$.amount").value("100.25"))
-                .andExpect(jsonPath("$.currency").value("BRL"));
+                .andExpect(jsonPath("$.id").value(account.toString()))
+                .andExpect(jsonPath("$.owner").value(owner.toString()))
+                .andExpect(jsonPath("$.balance.amount").value(100.25))
+                .andExpect(jsonPath("$.balance.currency").value("BRL"))
+                .andExpect(jsonPath("$.updated_at").exists());
     }
 
     @Test

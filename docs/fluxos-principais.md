@@ -111,7 +111,7 @@ sequenceDiagram
     alt Sem snapshot
       UC-->>C: 404 ACCOUNT_NOT_FOUND
     else Encontrado
-      UC-->>C: 200 amount/currency/lastUpdatedAt
+      UC-->>C: 200 id/owner/balance/updated_at
     end
   end
 ```

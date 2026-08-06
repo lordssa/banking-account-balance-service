@@ -57,10 +57,16 @@ export default function () {
 
   const ok = check(res, {
     'status is 200': (r) => r.status === 200,
-    'body has amount': (r) => {
+    'body has balance.amount': (r) => {
       try {
         const body = r.json();
-        return body && typeof body.amount === 'string' && body.amount.length > 0;
+        return (
+          body &&
+          body.balance &&
+          body.balance.amount !== undefined &&
+          body.balance.amount !== null &&
+          body.balance.currency
+        );
       } catch (_) {
         return false;
       }

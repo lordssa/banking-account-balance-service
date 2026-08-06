@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: account-pg
     environment:
       POSTGRES_DB: account
       POSTGRES_USER: account
@@ -11,13 +12,16 @@ services:
       test: ["CMD-SHELL", "pg_isready -U account -d account"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
+      start_period: 5s
 
   localstack:
     image: localstack/localstack:3.7.2
     hostname: localstack
     container_name: localstack
     environment:
+      # LocalStack ready.d overwrites AWS_REGION to us-east-1 — pin init via SQS_INIT_REGION.
+      - SQS_INIT_REGION=sa-east-1
       - AWS_DEFAULT_REGION=sa-east-1
       - AWS_ACCESS_KEY_ID=test
       - AWS_SECRET_ACCESS_KEY=test
@@ -28,13 +32,22 @@ services:
       - "127.0.0.1:4566:4566"
       - "127.0.0.1:4510-4559:4510-4559"
     volumes:
+      # Creates source queue + DLQ + RedrivePolicy before LocalStack is "ready".
       - ../scripts/localstack-init-queues.sh:/etc/localstack/init/ready.d/init-queues.sh:ro
+    # Healthy only when SQS is up AND init has created topology (not just /_localstack/health).
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
+      test:
+        - CMD-SHELL
+        - |
+          curl -sf http://localhost:4566/_localstack/health >/dev/null || exit 1
+          SOURCE=$$(awslocal --region sa-east-1 sqs get-queue-url --queue-name transacoes-financeiras-processadas --query QueueUrl --output text) || exit 1
+          awslocal --region sa-east-1 sqs get-queue-url --queue-name transacoes-financeiras-processadas-dlq >/dev/null || exit 1
+          POLICY=$$(awslocal --region sa-east-1 sqs get-queue-attributes --queue-url "$$SOURCE" --attribute-names RedrivePolicy --query Attributes.RedrivePolicy --output text) || exit 1
+          echo "$$POLICY" | grep -q deadLetterTargetArn
+      interval: 5s
+      timeout: 10s
+      retries: 18
+      start_period: 20s
 
   otel-collector:
     image: otel/opentelemetry-collector:0.120.0
@@ -84,6 +97,8 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
+    container_name: account-service
+    # Starts only after Postgres accepts connections AND LocalStack has source+DLQ+redrive.
     depends_on:
       postgres:
         condition: service_healthy
@@ -100,7 +115,10 @@ services:
       SQS_TOPOLOGY_VALIDATION_MODE: observe
       AWS_ENDPOINT_OVERRIDE: http://localstack:4566
       AWS_REGION: sa-east-1
-      OTEL_METRICS_ENABLED: "false"
-      OTEL_LOGS_ENABLED: "false"
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      OTEL_METRICS_ENABLED: "true"
+      OTEL_LOGS_ENABLED: "true"
     ports:
       - "8080:8080"
+    restart: on-failure
